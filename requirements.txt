@@ -1,0 +1,5 @@
+pysimplegui
+numpy
+tetgen
+pymeshfix
+trimesh
