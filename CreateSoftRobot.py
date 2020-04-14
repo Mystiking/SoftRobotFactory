@@ -18,6 +18,7 @@ layout0 = [[sg.Text('Soft Robot Configuration Creation', font='Any 18')],
            [sg.Text('File paths', font='Any 14')],
            [TextLabel('Mesh filename'), sg.Input(key='meshFileName'), sg.FileBrowse(target='meshFileName')],
            [TextLabel('Out folder'), sg.Input(key='outfolder'), sg.FolderBrowse(target='outfolder')],
+           [TextLabel('Cfg file'), sg.Input(key='cfgfile'), sg.FileBrowse(target='cfgfile')],
            [sg.Text('TetGen & Misc', font='Any 14')],
            [sg.Frame(layout=[ [TextLabel('Show Robot'), sg.Checkbox('', key='showRobot', size=(10,1), default=True)],
                               [TextLabel('nobisect'), sg.Input('False', key='nobisect')],
@@ -44,6 +45,7 @@ direchlet_conditions = False
 endEffector = False
 meshname = ''
 outfolder = ''
+cfgfile = ''
 while True:
     event, values = window0.read()
     if event in ('Create Soft Robot'):
@@ -52,36 +54,50 @@ while True:
            not os.path.exists(values['meshFileName']) or\
            not (values['meshFileName'][-3:] in supported_files):
             print('Unsupported or non-existant surface mesh file.')
-            break
+            window0.close()
+            exit(0)
         if values['outfolder'] == '':
             print('No output folder specified.')
-            break
+            window0.close()
+            exit(0)
         outfolder = values['outfolder']
+        cfgfile = values['cfgfile']
         try:
             values['nobisect'] = bool(values['nobisect'])
         except:
             print('nobisect should be a boolean.')
-            break
+            window0.close()
+            exit(0)
         try:
             values['mindihedral'] = float(values['mindihedral'])
         except:
             print('mindihedral should be a number.')
+            window0.close()
+            exit(0)
         try:
             values['optmaxdihedral'] = float(values['optmaxdihedral'])
         except:
             print('optmaxdihedral should be a number.')
+            window0.close()
+            exit(0)
         try:
             values['minratio'] = float(values['minratio'])
         except:
             print('minratio should be a number.')
+            window0.close()
+            exit(0)
         try:
             numCables = int(values['numCables'])
         except:
             print('numCables should be an integer.')
+            window0.close()
+            exit(0)
         try:
             numAirChambers = int(values['numAirChambers'])
         except:
             print('numAirChambers should be an integer.')
+            window0.close()
+            exit(0)
         direchlet_conditions = bool(values['direchlet'])
         endEffector = bool(values['endEffector'])
 
@@ -98,13 +114,15 @@ while True:
         meshname = values['meshFileName'].split('/')[-1][:-4]
         break
     if event in (None, 'Exit'):
-        break
+        window0.close()
         exit(0)
 
 window0.close()
 
 if showRobot:
     surfacemesh = ComputeSurfaceMesh(tet, ns, elems)
+    grid = tet.grid
+    grid.plot()
     surfacemesh.show()
 
 layout1 = [[sg.Text('Do you want to continue?', font='Any 18')],
@@ -125,14 +143,34 @@ window1.close()
 
 layout2 = [[sg.Text('Soft Robot Configuration Creation', font='Any 18')]]
 if numCables > 0:
-    layout2.append([sg.Frame(layout=[
-                          [TextLabel('stiffness ([float])'), sg.Input('[' + ('1e3, ' * numCables)[:-2] + ']', key='stiffness')],
-                          [TextLabel('damping ([float])'), sg.Input('[' + ('1e-2, ' * numCables)[:-2] + ']', key='damping')],
-                          [TextLabel('# cable points ([int])'), sg.Input('[' + ('0, ' * numCables)[:-2] + ']', key='numCablePoints')],
-                          [TextLabel('cable points ([[float]])'), sg.Input('[' + ('[], ' * numCables)[:-2] + ']', key='cablePoints')],
-                        ], title='Cable Options', relief=sg.RELIEF_SUNKEN,)])
+    if cfgfile != '':
+        cablePointsFromCfg = open(cfgfile).readlines()[0]
+        layout2.append([sg.Frame(layout=[
+                              [TextLabel('stiffness ([float])'), sg.Input('[' + ('1e3, ' * numCables)[:-2] + ']', key='stiffness')],
+                              [TextLabel('damping ([float])'), sg.Input('[' + ('1e-2, ' * numCables)[:-2] + ']', key='damping')],
+                              [TextLabel('# cable points ([int])'), sg.Input('[' + ('{0}, '.format(len(ast.literal_eval(cablePointsFromCfg)[0])) * numCables)[:-2] + ']', key='numCablePoints')],
+                              [TextLabel('cable points ([[float]])'), sg.Input(cablePointsFromCfg, key='cablePoints')],
+                            ], title='Cable Options', relief=sg.RELIEF_SUNKEN,)])
+    else:
+        layout2.append([sg.Frame(layout=[
+                              [TextLabel('stiffness ([float])'), sg.Input('[' + ('1e3, ' * numCables)[:-2] + ']', key='stiffness')],
+                              [TextLabel('damping ([float])'), sg.Input('[' + ('1e-2, ' * numCables)[:-2] + ']', key='damping')],
+                              [TextLabel('# cable points ([int])'), sg.Input('[' + ('0, ' * numCables)[:-2] + ']', key='numCablePoints')],
+                              [TextLabel('cable points ([[float]])'), sg.Input('[' + ('[], ' * numCables)[:-2] + ']', key='cablePoints')],
+                            ], title='Cable Options', relief=sg.RELIEF_SUNKEN,)])
 if direchlet_conditions:
-    layout2.append([sg.Frame(layout=[
+    if cfgfile != '':
+        dcFromCfg = ast.literal_eval(open(cfgfile).readlines()[1])
+        layout2.append([sg.Frame(layout=[
+                              [TextLabel('xmin ([float])'), sg.Input('[' + str(dcFromCfg[0]) + ']', key='xmin')],
+                              [TextLabel('ymin ([float])'), sg.Input('[' + str(dcFromCfg[1]) + ']', key='ymin')],
+                              [TextLabel('zmin ([float])'), sg.Input('[' + str(dcFromCfg[2]) + ']', key='zmin')],
+                              [TextLabel('xmax ([float])'), sg.Input('[' + str(dcFromCfg[3]) + ']', key='xmax')],
+                              [TextLabel('ymax ([float])'), sg.Input('[' + str(dcFromCfg[4]) + ']', key='ymax')],
+                              [TextLabel('zmax ([float])'), sg.Input('[' + str(dcFromCfg[5]) + ']', key='zmax')]
+                            ], title='Direchlet Conditions', relief=sg.RELIEF_SUNKEN,)])
+    else:
+        layout2.append([sg.Frame(layout=[
                           [TextLabel('xmin ([float])'), sg.Input('[]', key='xmin')],
                           [TextLabel('ymin ([float])'), sg.Input('[]', key='ymin')],
                           [TextLabel('zmin ([float])'), sg.Input('[]', key='zmin')],
@@ -141,7 +179,13 @@ if direchlet_conditions:
                           [TextLabel('zmax ([float])'), sg.Input('[]', key='zmax')]
                         ], title='Direchlet Conditions', relief=sg.RELIEF_SUNKEN,)])
 if endEffector:
-    layout2.append([sg.Frame(layout=[
+    if cfgfile != '':
+        endEffectorFromCfg = open(cfgfile).readlines()[2]
+        layout2.append([sg.Frame(layout=[
+                              [TextLabel('End effector ([float])'), sg.Input(endEffectorFromCfg, key='endEffectorPoint')],
+                            ], title='End Effector', relief=sg.RELIEF_SUNKEN,)])
+    else:
+        layout2.append([sg.Frame(layout=[
                           [TextLabel('End effector ([float])'), sg.Input('[]', key='endEffectorPoint')],
                         ], title='End Effector', relief=sg.RELIEF_SUNKEN,)])
 layout2.append([sg.Button('Create'), sg.Exit()])
@@ -170,22 +214,26 @@ while True:
                 stiffness = ast.literal_eval(values['stiffness'])
             except:
                 print('stiffness should be a list of stiffness coefficients.')
-                break
+                window2.close()
+                exit(0)
             try:
                 damping = ast.literal_eval(values['damping'])
             except:
                 print('damping should be a list of damping coefficients.')
-                break
+                window2.close()
+                exit(0)
             try:
                 numCablePoints = ast.literal_eval(values['numCablePoints'])
             except:
                 print('# cable points should be a list of the amount of points in each cable.')
-                break
+                window2.close()
+                exit(0)
             try:
                 cablePoints = ast.literal_eval(values['cablePoints'])
             except:
                 print('cablePoints should be a list of cable point lists.')
-                break
+                window2.close()
+                exit(0)
         if numAirChambers > 0:
             # TODO: Add air-chamber support
             pass
@@ -194,38 +242,45 @@ while True:
                 xmin = ast.literal_eval(values['xmin'])
             except:
                 print('xmin should be a list of min x-values for dirichlet bounding boxes.')
-                break
+                window2.close()
+                exit(0)
             try:
                 ymin = ast.literal_eval(values['ymin'])
             except:
                 print('ymin should be a list of min y-values for dirichlet bounding boxes.')
-                break
+                window2.close()
+                exit(0)
             try:
                 zmin = ast.literal_eval(values['zmin'])
             except:
                 print('zmin should be a list of min z-values for dirichlet bounding boxes.')
-                break
+                window2.close()
+                exit(0)
             try:
                 xmax = ast.literal_eval(values['xmax'])
             except:
                 print('xmax should be a list of max x-values for dirichlet bounding boxes.')
-                break
+                window2.close()
+                exit(0)
             try:
                 ymax = ast.literal_eval(values['ymax'])
             except:
                 print('ymax should be a list of max y-values for dirichlet bounding boxes.')
-                break
+                window2.close()
+                exit(0)
             try:
                 zmax = ast.literal_eval(values['zmax'])
             except:
                 print('zmax should be a list of max z-values for dirichlet bounding boxes.')
-                break
+                window2.close()
+                exit(0)
         if endEffector:
             try:
                 endEffectorPoint = ast.literal_eval(values['endEffectorPoint'])
             except:
                 print('End Effector should be a point on the mesh.')
-                break
+                window2.close()
+                exit(0)
         # Compute remaining info
         if numCables > 0:
             barycentricCoordinates, cableParticles, cableLengths = ComputeCablePoints(cablePoints, surfacemesh)
