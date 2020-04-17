@@ -3,3 +3,4 @@ numpy
 tetgen
 pymeshfix
 trimesh
+pyglet
