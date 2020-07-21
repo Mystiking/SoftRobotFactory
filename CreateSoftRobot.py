@@ -3,6 +3,7 @@ import numpy as np
 import pyvista as pv
 import tetgen
 import trimesh
+from pymeshfix import _meshfix
 import os, sys, time, ast
 # Mesh utility functionality
 from utils import ComputeSurfaceMesh, ComputeCablePoints, ComputeEndEffectorPoint
@@ -27,6 +28,7 @@ layout0 = [[sg.Text('Soft Robot Configuration Creation', font='Any 18')],
                               [TextLabel('minratio'), sg.Input(1.5, key='minratio')],
                               [TextLabel('# cables'), sg.Input(0, key='numCables')],
                               [TextLabel('# air chambers'), sg.InputText('0', key='numAirChambers')],
+                              [TextLabel('scale'), sg.Input(1.0, key='scale')],
                               [TextLabel('Direchlet Conditions'), sg.Checkbox('', key='direchlet', size=(10,1), default=False)],
                               [TextLabel('Has end-effector'), sg.Checkbox('', key='endEffector', size=(10,1), default=False)]
                             ], title='Options', relief=sg.RELIEF_SUNKEN,)],
@@ -41,6 +43,7 @@ showRobot = False
 surfacemesh = None
 numCables = 0
 numAirChambers = 0
+scale = 1.0
 direchlet_conditions = False
 endEffector = False
 meshname = ''
@@ -63,7 +66,7 @@ while True:
         outfolder = values['outfolder']
         cfgfile = values['cfgfile']
         try:
-            values['nobisect'] = bool(values['nobisect'])
+            values['nobisect'] = ast.literal_eval(values['nobisect'])
         except:
             print('nobisect should be a boolean.')
             window0.close()
@@ -98,8 +101,14 @@ while True:
             print('numAirChambers should be an integer.')
             window0.close()
             exit(0)
-        direchlet_conditions = bool(values['direchlet'])
-        endEffector = bool(values['endEffector'])
+        try:
+            scale = float(values['scale'])
+        except:
+            print('scale should be a number.')
+            window0.close()
+            exit(0)
+        direchlet_conditions = values['direchlet']
+        endEffector = values['endEffector']
 
         # Perform the tetgen tetrahedralise step
         mesh = trimesh.load(values['meshFileName'])
@@ -119,10 +128,12 @@ while True:
 
 window0.close()
 
+surfacemesh = mesh
+verts = surfacemesh.vertices
+faces = surfacemesh.faces
+vclean, fclean = _meshfix.clean_from_arrays(verts, faces)
+surfacemesh = trimesh.Trimesh(vclean, fclean)
 if showRobot:
-    surfacemesh = ComputeSurfaceMesh(tet, ns, elems)
-    grid = tet.grid
-    grid.plot()
     surfacemesh.show()
 
 layout1 = [[sg.Text('Do you want to continue?', font='Any 18')],
@@ -296,22 +307,30 @@ while True:
         ## .tet file (volume mesh)
         with open(meshname + '.tet', 'w') as tetfile:
             for v in ns:
-                tetfile.write('v ' + ' '.join([str(val) for val in v]) + '\r\n')
+                tetfile.write('v ' + ' '.join([str(val * scale) for val in v]) + '\r\n')
             for t in elems:
                 tetfile.write('t ' + ' '.join([str(val) for val in t[:4]]) + '\r\n')
         ## .obj file (Render mesh)
         with open(meshname + '.obj', 'w') as objfile:
             for vi in range(len(surfacemesh.vertices)):
                 objfile.write("vn " + " ".join([str(val) for val in surfacemesh.vertex_normals[vi]]) + "\r\n")
-                objfile.write("v " + " ".join([str(val) for val in surfacemesh.vertices[vi]]) + "\r\n")
+                objfile.write("v " + " ".join([str(val * scale) for val in surfacemesh.vertices[vi]]) + "\r\n")
             for fi in range(len(surfacemesh.faces)):
                 objfile.write("f " + " ".join([str(val+1) + "//" + str(val+1) for val in surfacemesh.faces[fi]]) + "\r\n")
         ## .objmax file (Used to compute surface -> particle mapping)
         with open(meshname + '.objmax', 'w') as objmaxfile:
             for vi in range(len(surfacemesh.vertices)):
-                objmaxfile.write("v " + " ".join([str(val) for val in surfacemesh.vertices[vi]]) + "\r\n")
+                objmaxfile.write("v " + " ".join([str(val  * scale) for val in surfacemesh.vertices[vi]]) + "\r\n")
             for fi in range(len(surfacemesh.faces)):
                 objmaxfile.write("f " + " ".join([str(val+1) for val in surfacemesh.faces[fi]]) + "\r\n")
+        ## .off file (Not used by Flex)
+        with open(meshname + '.off', 'w') as offfile:
+            offfile.write('OFF\n')
+            offfile.write(str(len(surfacemesh.vertices)) + ' ' + str(len(surfacemesh.faces)) + ' 0\n')
+            for vi in range(len(surfacemesh.vertices)):
+                offfile.write(" ".join([str(val  * scale) for val in surfacemesh.vertices[vi]]) + "\n")
+            for fi in range(len(surfacemesh.faces)):
+                offfile.write("3  " + " ".join([str(val) for val in surfacemesh.faces[fi]]) + "\n")
         ## .cfg file (Robot configuration file consisting of cables, air chambers, direchlet conditions and end effectors)
         with open(meshname + '.cfg', 'w') as cfgfile:
             # Writing cable data
